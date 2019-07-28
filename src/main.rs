@@ -54,8 +54,8 @@ fn test_aead(key : &[u8], data :&[u8], datalength : usize, algo: &'static ring::
     )
     .unwrap();
 
-    println!("{}", BASE64.encode(&data[..]));
-    println!("{}", BASE64.encode(&decrypted_data[..datalength]));
+    //println!("{}", BASE64.encode(&data[..]));
+    //println!("{}", BASE64.encode(&decrypted_data[..datalength]));
     assert_eq!(data[..], decrypted_data[..datalength]);
 
 }
