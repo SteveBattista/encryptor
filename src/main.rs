@@ -1,12 +1,13 @@
 #![forbid(unsafe_code)]
 
-//use data_encoding::BASE64;
-//use std::error::Error;
-use ring::aead::*;
+
 use rand::*;
-use ring::digest::{Context, SHA256, SHA384, SHA512, SHA512_256};
 use ring::agreement::{ECDH_P256,ECDH_P384,X25519};
-use ring::rand as ringrand;
+use ring::aead::{CHACHA20_POLY1305,AES_128_GCM,AES_256_GCM};
+use ring::digest::{Context, SHA256, SHA384, SHA512, SHA512_256};
+use ring::hkdf::{HKDF_SHA256,HKDF_SHA384,HKDF_SHA512};
+use ring::hmac::{HMAC_SHA256,HMAC_SHA384,HMAC_SHA512};
+//use ring::rand as ringrand;
 use data_encoding::BASE64;
 
 
@@ -39,7 +40,7 @@ fn test_aead(key : &[u8], data :&[u8], datalength : usize, algo: &'static ring::
     ring::aead::LessSafeKey::seal_in_place_append_tag(
         &less_safe_key ,
         ring::aead::Nonce::assume_unique_for_key(*nonce_byte),
-        Aad::empty(),
+        ring::aead::Aad::empty(),
         &mut in_out
     )
     .unwrap();
@@ -49,7 +50,7 @@ fn test_aead(key : &[u8], data :&[u8], datalength : usize, algo: &'static ring::
     let decrypted_data = ring::aead::LessSafeKey::open_in_place(
         &less_safe_key,
         ring::aead::Nonce::assume_unique_for_key(*nonce_byte),
-        Aad::empty(),
+        ring::aead::Aad::empty(),
         &mut in_out,
     )
     .unwrap();
@@ -59,34 +60,36 @@ fn test_aead(key : &[u8], data :&[u8], datalength : usize, algo: &'static ring::
     assert_eq!(data[..], decrypted_data[..datalength]);
 
 }
-fn test_agreement(data :&[u8], algo: &'static ring::agreement::Algorithm ) {
-    let rng = ringrand::SystemRandom::new();
+fn test_agreement( data :&[u8], key : &[u8], algo: &'static ring::agreement::Algorithm ) {
+    //let rng = ringrand::SystemRandom::new();
+    let rng = ring::test::rand::FixedSliceRandom { bytes: key};
+    println!("Before Private key");
+    let my_private_key = ring::agreement::EphemeralPrivateKey::generate(&algo, &rng).unwrap();
 
-let my_private_key = ring::agreement::EphemeralPrivateKey::generate(&algo, &rng).unwrap();
+    // Make `my_public_key` a byte slice containing my public key. In a real
+    // application, this would be sent to the peer in an encoded protocol
+    // message.
+    println!("Before Public key");
+    let _my_public_key = my_private_key.compute_public_key().unwrap();
 
-// Make `my_public_key` a byte slice containing my public key. In a real
-// application, this would be sent to the peer in an encoded protocol
-// message.
-let _my_public_key = my_private_key.compute_public_key().unwrap();
-
-let peer_private_key = ring::agreement::EphemeralPrivateKey::generate(&algo, &rng).unwrap();
-let peer_public_key =  peer_private_key.compute_public_key().unwrap();
-let peer_public_key = ring::agreement::UnparsedPublicKey::new(&algo, peer_public_key);
+    let peer_private_key = ring::agreement::EphemeralPrivateKey::generate(&algo, &rng).unwrap();
+    let peer_public_key =  peer_private_key.compute_public_key().unwrap();
+    let peer_public_key = ring::agreement::UnparsedPublicKey::new(&algo, peer_public_key);
 
     // In a real application, the peer public key would be parsed out of a
     // protocol message. Here we just generate one.
 
-ring::agreement::agree_ephemeral(
-    my_private_key,
-    &peer_public_key,
-    ring::error::Unspecified,
-    |_key_material| {
-        // In a real application, we'd apply a KDF to the key material and the
-        // public keys (as recommended in RFC 7748) and then derive session
-        // keys from the result. We omit all that here.
-        Ok(())
-    },
-).unwrap();
+    ring::agreement::agree_ephemeral(
+        my_private_key,
+        &peer_public_key,
+        ring::error::Unspecified,
+        |_key_material| {
+            // In a real application, we'd apply a KDF to the key material and the
+            // public keys (as recommended in RFC 7748) and then derive session
+            // keys from the result. We omit all that here.
+            Ok(())
+        },
+    ).unwrap();
 }
 
 
@@ -96,6 +99,18 @@ fn test_digest(data :&[u8], aglo: &'static ring::digest::Algorithm ){
     context.finish();
 }
 
+fn test_hkdf(data :&[u8], key : &[u8],algo: &'static ring::hkdf::Algorithm ) {
+    let salt  = ring::hkdf::Salt::new(*algo,key);
+    let prk = salt.extract(data);
+    //prk.expand(&[&data], 5).unwrap().into();
+    //let okm_item = ring::hkdf::Prk::expand(prk_item);
+}
+
+fn test_hmac(key : &[u8], data :&[u8], algo: &'static ring::hmac::Algorithm ) {
+        let key = ring::hmac::Key::new(*algo, key);
+        let signature = ring::hmac::sign(&key, data);
+        assert_eq!(true, ring::hmac::verify(&key, data, signature.as_ref()).is_ok());
+    }
 
 fn main() {
     let mut rng = rand::thread_rng();
@@ -122,12 +137,23 @@ fn main() {
     //println!("AES_256_GCM");
     test_aead(key,data,datalength,&AES_256_GCM);
 
-    test_agreement(data,&ECDH_P256);
-    test_agreement(data,&ECDH_P384);
-    test_agreement(data,&X25519);
+    println!("done aead");
+    test_agreement(data,key,&ECDH_P256);
+    test_agreement(data,key,&ECDH_P384);
+    test_agreement(data,key,&X25519);
 
+    println!("done agreement");
     test_digest(data,&SHA256);
     test_digest(data,&SHA384);
     test_digest(data,&SHA512);
     test_digest(data,&SHA512_256);
+
+    println!("done digest");
+    test_hkdf(data,key,&HKDF_SHA256);
+    test_hkdf(data,key,&HKDF_SHA384);
+    test_hkdf(data,key,&HKDF_SHA512);
+
+    test_hmac(data,key,&HMAC_SHA256);
+    test_hmac(data,key,&HMAC_SHA384);
+    test_hmac(data,key,&HMAC_SHA512);
 }
