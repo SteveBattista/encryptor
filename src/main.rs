@@ -120,13 +120,14 @@ fn test_hmac(key : &[u8], data :&[u8], algo: &'static ring::hmac::Algorithm ) {
     }
 
 fn test_pbkdf2(data: &[u8], iterations: usize, algo: &'static ring::pbkdf2::Algorithm ) {
-    let mut out = vec![0u8; algo.len()];
-    let salt : &mut [u8];
+    let mut out = vec![0u8];
+    let salt = &mut [0,16];
     let mut context = Context::new(&SHA256);
     context.update(&data[..]);
     salt.copy_from_slice(&context.finish().as_ref()[0..16]);
-    let iterations = std::num::NonZeroU32::new(iterations as u32).unwrap();
-    ring::pbkdf2::derive(*algo, iterations, &salt, &data, &mut out);
+    let iterations = std::num::NonZeroU32::new((iterations % 100 )as u32).unwrap();
+    ring::pbkdf2::derive(*algo, iterations , &salt[..], &data, &mut out);
+    assert_eq!( ring::pbkdf2::verify(*algo, iterations, &salt[..], &data, &out),Ok(()));
 }
 
 fn main() {
@@ -153,28 +154,31 @@ fn main() {
     test_aead(&key[0..16],data,datalength,&AES_128_GCM);
     //println!("AES_256_GCM");
     test_aead(key,data,datalength,&AES_256_GCM);
-
     println!("done aead");
+
     test_agreement(key,&ECDH_P256);
     test_agreement(key,&ECDH_P384);
     test_agreement(key,&X25519);
-
     println!("done agreement");
+
     test_digest(data,&SHA256);
     test_digest(data,&SHA384);
     test_digest(data,&SHA512);
     test_digest(data,&SHA512_256);
-
     println!("done digest");
+
     test_hkdf(data,key,&HKDF_SHA256);
     test_hkdf(data,key,&HKDF_SHA384);
     test_hkdf(data,key,&HKDF_SHA512);
+    println!("done hkdf");
 
     test_hmac(data,key,&HMAC_SHA256);
     test_hmac(data,key,&HMAC_SHA384);
     test_hmac(data,key,&HMAC_SHA512);
+    println!("done hmac");
 
-    test_pbkdf2(data,datalength,PBKDF2_HMAC_SHA256);
-    test_pbkdf2(data,datalength,PBKDF2_HMAC_SHA384);
-    test_pbkdf2(data,datalength,PBKDF2_HMAC_SHA512);
+    test_pbkdf2(data,datalength,&PBKDF2_HMAC_SHA256);
+    test_pbkdf2(data,datalength,&PBKDF2_HMAC_SHA384);
+    test_pbkdf2(data,datalength,&PBKDF2_HMAC_SHA512);
+    println!("done pbkdf2");
 }
