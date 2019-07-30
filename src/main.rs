@@ -62,18 +62,16 @@ fn test_aead(key : &[u8], data :&[u8], datalength : usize, algo: &'static ring::
     assert_eq!(data[..], decrypted_data[..datalength]);
 
 }
-fn test_agreement(key : &[u8], algo: &'static ring::agreement::Algorithm ) {
+fn test_agreement(data : &[u8], keylenth: usize, algo: &'static ring::agreement::Algorithm ) {
     //let rng = ringrand::SystemRandom::new();
-    let rng = ring::test::rand::FixedSliceRandom { bytes: key};
-    println!("Before Private key");
+    //TODO make the key a SHA512 hash of data then take values
+    let rng = ring::test::rand::FixedSliceRandom { bytes: &data[0..keylenth]};
     let my_private_key = ring::agreement::EphemeralPrivateKey::generate(&algo, &rng).unwrap();
 
     // Make `my_public_key` a byte slice containing my public key. In a real
     // application, this would be sent to the peer in an encoded protocol
     // message.
-    println!("Before Public key");
     let _my_public_key = my_private_key.compute_public_key().unwrap();
-
     let peer_private_key = ring::agreement::EphemeralPrivateKey::generate(&algo, &rng).unwrap();
     let peer_public_key =  peer_private_key.compute_public_key().unwrap();
     let peer_public_key = ring::agreement::UnparsedPublicKey::new(&algo, peer_public_key);
@@ -120,14 +118,17 @@ fn test_hmac(key : &[u8], data :&[u8], algo: &'static ring::hmac::Algorithm ) {
     }
 
 fn test_pbkdf2(data: &[u8], iterations: usize, algo: &'static ring::pbkdf2::Algorithm ) {
-    let mut out = vec![0u8];
-    let salt = &mut [0,16];
+    let mut out = vec![100u8];
+
+    let salt = &mut [0,2];
     let mut context = Context::new(&SHA256);
     context.update(&data[..]);
-    salt.copy_from_slice(&context.finish().as_ref()[0..16]);
-    let iterations = std::num::NonZeroU32::new((iterations % 100 )as u32).unwrap();
+    salt.copy_from_slice(&context.finish().as_ref()[0..2]);
+    let iterations = std::num::NonZeroU32::new(iterations as u32).unwrap();
     ring::pbkdf2::derive(*algo, iterations , &salt[..], &data, &mut out);
-    assert_eq!( ring::pbkdf2::verify(*algo, iterations, &salt[..], &data, &out),Ok(()));
+    let answer = ring::pbkdf2::verify(*algo, iterations, &salt[..], &data, &out);
+    println!("out: {}", BASE64.encode(out.as_ref()));
+    assert_eq!( answer,Ok(()));
 }
 
 fn main() {
@@ -156,9 +157,9 @@ fn main() {
     test_aead(key,data,datalength,&AES_256_GCM);
     println!("done aead");
 
-    test_agreement(key,&ECDH_P256);
-    test_agreement(key,&ECDH_P384);
-    test_agreement(key,&X25519);
+    test_agreement(data,32,&ECDH_P256);
+    test_agreement(data,48,&ECDH_P384);
+    test_agreement(data,32,&X25519);
     println!("done agreement");
 
     test_digest(data,&SHA256);
