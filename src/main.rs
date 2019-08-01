@@ -1,21 +1,17 @@
 #![forbid(unsafe_code)]
 
-
-
 use rand::*;
-use ring::agreement::{ECDH_P256,ECDH_P384,X25519};
-use ring::aead::{CHACHA20_POLY1305,AES_128_GCM,AES_256_GCM};
+use ring::aead::{AES_128_GCM, AES_256_GCM, CHACHA20_POLY1305};
+use ring::agreement::{ECDH_P256, ECDH_P384, X25519};
 use ring::digest::{Context, SHA256, SHA384, SHA512, SHA512_256};
-use ring::hkdf::{HKDF_SHA256,HKDF_SHA384,HKDF_SHA512};
-use ring::hmac::{HMAC_SHA256,HMAC_SHA384,HMAC_SHA512};
-use ring::pbkdf2::{PBKDF2_HMAC_SHA256,PBKDF2_HMAC_SHA384,PBKDF2_HMAC_SHA512};
-//use ring::rand as ringrand;
+use ring::hkdf::{HKDF_SHA256, HKDF_SHA384, HKDF_SHA512};
+use ring::hmac::{HMAC_SHA256, HMAC_SHA384, HMAC_SHA512};
+use ring::pbkdf2::{PBKDF2_HMAC_SHA256, PBKDF2_HMAC_SHA384, PBKDF2_HMAC_SHA512};
+//use ring::test::rand as testrand;
 use data_encoding::BASE64;
+extern crate arrayref;
 
-
-
-fn test_aead(key : &[u8], data :&[u8], datalength : usize, algo: &'static ring::aead::Algorithm ) {
-
+fn test_aead(key: &[u8], data: &[u8], random1: &[u8], algo: &'static ring::aead::Algorithm) {
     // Ring uses the same input variable as output
     let mut in_out = data.to_vec();
 
@@ -25,25 +21,19 @@ fn test_aead(key : &[u8], data :&[u8], datalength : usize, algo: &'static ring::
     }
 
     // Opening key used to decrypt data
-    let unboud_key = ring::aead::UnboundKey::new(algo,key).unwrap();
+    let unboud_key = ring::aead::UnboundKey::new(algo, key).unwrap();
     let less_safe_key = ring::aead::LessSafeKey::new(unboud_key);
-    //Nonce::assume_unique_for_key(*nonce_byte),
 
-    // Sealing key used to encrypt data
-    //let sealing_key = SealingKey::new(&algo, key).unwrap();
-
-    // Random nonce is first 12 bytes of a hash of the key
     let nonce_byte = &mut [0; 12];
-    let mut context = Context::new(&SHA256);
-    context.update(&key[..]);
-    nonce_byte.copy_from_slice(&context.finish().as_ref()[0..12]);
+
+    nonce_byte.copy_from_slice(&random1[0..12]);
 
     // Encrypt data into in_out variable
     ring::aead::LessSafeKey::seal_in_place_append_tag(
-        &less_safe_key ,
+        &less_safe_key,
         ring::aead::Nonce::assume_unique_for_key(*nonce_byte),
         ring::aead::Aad::empty(),
-        &mut in_out
+        &mut in_out,
     )
     .unwrap();
 
@@ -59,13 +49,14 @@ fn test_aead(key : &[u8], data :&[u8], datalength : usize, algo: &'static ring::
 
     //println!("{}", BASE64.encode(&data[..]));
     //println!("{}", BASE64.encode(&decrypted_data[..datalength]));
-    assert_eq!(data[..], decrypted_data[..datalength]);
-
+    assert_eq!(data[..], decrypted_data[..data.len()]);
 }
-fn test_agreement(data : &[u8], keylenth: usize, algo: &'static ring::agreement::Algorithm ) {
+fn test_agreement(random1 :&[u8],keylenth: usize, algo: &'static ring::agreement::Algorithm) {
     //let rng = ringrand::SystemRandom::new();
     //TODO make the key a SHA512 hash of data then take values
-    let rng = ring::test::rand::FixedSliceRandom { bytes: &data[0..keylenth]};
+    let rng = ring::test::rand::FixedSliceRandom {
+        bytes: &random1[0..keylenth],
+    };
     let my_private_key = ring::agreement::EphemeralPrivateKey::generate(&algo, &rng).unwrap();
 
     // Make `my_public_key` a byte slice containing my public key. In a real
@@ -73,7 +64,7 @@ fn test_agreement(data : &[u8], keylenth: usize, algo: &'static ring::agreement:
     // message.
     let _my_public_key = my_private_key.compute_public_key().unwrap();
     let peer_private_key = ring::agreement::EphemeralPrivateKey::generate(&algo, &rng).unwrap();
-    let peer_public_key =  peer_private_key.compute_public_key().unwrap();
+    let peer_public_key = peer_private_key.compute_public_key().unwrap();
     let peer_public_key = ring::agreement::UnparsedPublicKey::new(&algo, peer_public_key);
 
     // In a real application, the peer public key would be parsed out of a
@@ -89,97 +80,127 @@ fn test_agreement(data : &[u8], keylenth: usize, algo: &'static ring::agreement:
             // keys from the result. We omit all that here.
             Ok(())
         },
-    ).unwrap();
+    )
+    .unwrap();
 }
 
-
-fn test_digest(data :&[u8], aglo: &'static ring::digest::Algorithm ){
+fn test_digest(data: &[u8], aglo: &'static ring::digest::Algorithm) {
     let mut context = Context::new(aglo);
     context.update(data);
     context.finish();
 }
 
-
-
-fn test_hkdf(data :&[u8], key : &[u8],algo: &'static ring::hkdf::Algorithm ) {
-    let salt  = ring::hkdf::Salt::new(*algo,key);
+fn test_hkdf(data: &[u8], key: &[u8], algo: &'static ring::hkdf::Algorithm) {
+    let salt = ring::hkdf::Salt::new(*algo, key);
     let _prk = salt.extract(data);
     //let info: &[&[u8]];
     //prk.expand(&[&data], 5).unwrap().into();
-//    let okm_item = ring::hkdf::Prk::expand(&prk, ;
+    //    let okm_item = ring::hkdf::Prk::expand(&prk, ;
 }
 
+fn test_hmac(key: &[u8], data: &[u8], algo: &'static ring::hmac::Algorithm) {
+    let key = ring::hmac::Key::new(*algo, key);
+    let signature = ring::hmac::sign(&key, data);
+    assert_eq!(
+        true,
+        ring::hmac::verify(&key, data, signature.as_ref()).is_ok()
+    );
+}
 
-
-fn test_hmac(key : &[u8], data :&[u8], algo: &'static ring::hmac::Algorithm ) {
-        let key = ring::hmac::Key::new(*algo, key);
-        let signature = ring::hmac::sign(&key, data);
-        assert_eq!(true, ring::hmac::verify(&key, data, signature.as_ref()).is_ok());
-    }
-
-fn test_pbkdf2(data: &[u8], iterations: usize, algo: &'static ring::pbkdf2::Algorithm ) {
-    let mut out = vec![100u8];
-
-    let salt = &mut [0,2];
-    let mut context = Context::new(&SHA256);
-    context.update(&data[..]);
-    salt.copy_from_slice(&context.finish().as_ref()[0..2]);
+fn test_pbkdf2(
+    data: &[u8],
+    random1: &[u8],
+    random2: &[u8],
+    algo: &'static ring::pbkdf2::Algorithm,
+) {
+    let mut out = vec![0; random1.len()];
+    let iterations = random2.len();
     let iterations = std::num::NonZeroU32::new(iterations as u32).unwrap();
-    ring::pbkdf2::derive(*algo, iterations , &salt[..], &data, &mut out);
-    let answer = ring::pbkdf2::verify(*algo, iterations, &salt[..], &data, &out);
-    println!("out: {}", BASE64.encode(out.as_ref()));
-    assert_eq!( answer,Ok(()));
+    ring::pbkdf2::derive(*algo, iterations, &random2, &data, &mut out);
+    let answer = ring::pbkdf2::verify(*algo, iterations, &random2, &data, out.as_ref());
+    //println!("out: {}", BASE64.encode(out.as_ref()));
+    assert_eq!(answer, Ok(()));
 }
 
 fn main() {
-    let mut rng = rand::thread_rng();
+    for _ in 0..11 {
+        let mut rng = rand::thread_rng();
 
-    let datalength: usize = rng.gen_range(0, 1000);
-    //println!("Data lenght is {}", datalength);
+        let datalength: usize = rng.gen_range(1, 1000);
+        //48 is needed due to the agreement function. Need to fix this
+        //println!("Data lenght is {}", datalength);
 
-    let mut content = Vec::new();
-    for _ in 0..datalength {
-        let value: u8 = rng.gen();
-        content.push(value);
+        let mut content = Vec::new();
+        for _ in 0..datalength {
+            let value: u8 = rng.gen();
+            content.push(value);
+        }
+        let data : &[u8] = content.as_ref();
+
+        //println!("Data: {}", BASE64.encode(data));
+
+        let mut rng: rand::rngs::StdRng =
+            rand::SeedableRng::from_seed(*arrayref::array_ref!(data, 0, 32));
+
+        let randomlen = rng.gen_range(48, 500); //Needed for agreement function
+        let mut content = Vec::new();
+        for _ in 0..randomlen {
+            let value: u8 = rng.gen();
+            content.push(value);
+        }
+        let random1: &[u8] = content.as_ref();
+        //println!("random1len: {}", random1.len());
+        //println!("random1: {}", BASE64.encode(random1));
+
+        let randomlen = rng.gen_range(1, 500);
+        let mut content = Vec::new();
+        for _ in 0..randomlen {
+            let value: u8 = rng.gen();
+            content.push(value);
+        }
+        let random2: &[u8] = content.as_ref();
+        //println!("random2len: {}", random2.len());
+        //println!("random2: {}", BASE64.encode(random2));
+
+        let mut content = Vec::new();
+        for _ in 0..32 {
+            let value: u8 = rng.gen();
+            content.push(value);
+        }
+        let key: &[u8] = content.as_ref();
+
+        //println!("CHACHA20_POLY1305");
+        test_aead(key, data, random1, &CHACHA20_POLY1305);
+        //Note: 128 bit key not 256 like the other two aeads
+        test_aead(&key[0..16], data, random1, &AES_128_GCM);
+        //println!("AES_256_GCM");
+        test_aead(key, data, random1, &AES_256_GCM);
+        println!("done aead");
+
+        test_agreement(random1, 32, &ECDH_P256);
+        test_agreement(random1, 48, &ECDH_P384);
+        test_agreement(random1, 32, &X25519);
+        println!("done agreement");
+
+        test_digest(data, &SHA256);
+        test_digest(data, &SHA384);
+        test_digest(data, &SHA512);
+        test_digest(data, &SHA512_256);
+        println!("done digest");
+
+        test_hkdf(data, key, &HKDF_SHA256);
+        test_hkdf(data, key, &HKDF_SHA384);
+        test_hkdf(data, key, &HKDF_SHA512);
+        println!("done hkdf");
+
+        test_hmac(data, key, &HMAC_SHA256);
+        test_hmac(data, key, &HMAC_SHA384);
+        test_hmac(data, key, &HMAC_SHA512);
+        println!("done hmac");
+
+        test_pbkdf2(data, random1, random2, &PBKDF2_HMAC_SHA256);
+        test_pbkdf2(data, random1, random2, &PBKDF2_HMAC_SHA384);
+        test_pbkdf2(data, random1, random2, &PBKDF2_HMAC_SHA512);
+        println!("done pbkdf2");
     }
-    let data = content.as_ref();
-    let key : &mut [u8] = &mut[0;32];
-    let mut context = Context::new(&SHA256);
-    context.update(&data);
-    key.copy_from_slice(&context.finish().as_ref()[..]);
-    println!("Data: {}", BASE64.encode(data));
-
-    //println!("CHACHA20_POLY1305");
-    test_aead(key,data,datalength,&CHACHA20_POLY1305);
-    //Note: 128 bit key not 256 like the other two aeads
-    test_aead(&key[0..16],data,datalength,&AES_128_GCM);
-    //println!("AES_256_GCM");
-    test_aead(key,data,datalength,&AES_256_GCM);
-    println!("done aead");
-
-    test_agreement(data,32,&ECDH_P256);
-    test_agreement(data,48,&ECDH_P384);
-    test_agreement(data,32,&X25519);
-    println!("done agreement");
-
-    test_digest(data,&SHA256);
-    test_digest(data,&SHA384);
-    test_digest(data,&SHA512);
-    test_digest(data,&SHA512_256);
-    println!("done digest");
-
-    test_hkdf(data,key,&HKDF_SHA256);
-    test_hkdf(data,key,&HKDF_SHA384);
-    test_hkdf(data,key,&HKDF_SHA512);
-    println!("done hkdf");
-
-    test_hmac(data,key,&HMAC_SHA256);
-    test_hmac(data,key,&HMAC_SHA384);
-    test_hmac(data,key,&HMAC_SHA512);
-    println!("done hmac");
-
-    test_pbkdf2(data,datalength,&PBKDF2_HMAC_SHA256);
-    test_pbkdf2(data,datalength,&PBKDF2_HMAC_SHA384);
-    test_pbkdf2(data,datalength,&PBKDF2_HMAC_SHA512);
-    println!("done pbkdf2");
 }
