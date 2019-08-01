@@ -89,13 +89,27 @@ fn test_digest(data: &[u8], aglo: &'static ring::digest::Algorithm) {
     context.update(data);
     context.finish();
 }
+struct My<T>(T);
 
-fn test_hkdf(data: &[u8], key: &[u8], algo: &'static ring::hkdf::Algorithm) {
+impl ring::hkdf::KeyType for My<usize> {
+    fn len(&self) -> usize {
+        self.0
+    }
+}
+
+impl From<ring::hkdf::Okm<'_, My<usize>>> for My<Vec<u8>> {
+    fn from(okm: ring::hkdf::Okm<My<usize>>) -> Self {
+        let mut r = vec![0u8; okm.len().0];
+        okm.fill(&mut r).unwrap();
+        My(r)
+    }
+}
+fn test_hkdf(data: &[u8], random1: &[u8], random2: &[u8], key: &[u8], algo: &'static ring::hkdf::Algorithm) {
+    //println!("datalen: {} , random1len {} , random2len {}, keylen {}",data.len(),random1.len(),random2.len(),key.len());
     let salt = ring::hkdf::Salt::new(*algo, key);
-    let _prk = salt.extract(data);
-    //let info: &[&[u8]];
-    //prk.expand(&[&data], 5).unwrap().into();
-    //    let okm_item = ring::hkdf::Prk::expand(&prk, ;
+    let prk = salt.extract(random1);
+    let My(_out)= prk.expand(&[&data], My(random2.len())).unwrap().into();
+    //println!("HDKF: {}", BASE64.encode(out.as_ref()));
 }
 
 fn test_hmac(key: &[u8], data: &[u8], algo: &'static ring::hmac::Algorithm) {
@@ -123,12 +137,12 @@ fn test_pbkdf2(
 }
 
 fn main() {
-    for _ in 0..11 {
+    for x in 0..100 {
+        println!("Attempt {}", x);
         let mut rng = rand::thread_rng();
 
-        let datalength: usize = rng.gen_range(1, 1000);
-        //48 is needed due to the agreement function. Need to fix this
-        //println!("Data lenght is {}", datalength);
+        let datalength: usize = rng.gen_range(32, 1000);
+        //32 is needed to seed the seedable rng
 
         let mut content = Vec::new();
         for _ in 0..datalength {
@@ -169,11 +183,9 @@ fn main() {
         }
         let key: &[u8] = content.as_ref();
 
-        //println!("CHACHA20_POLY1305");
         test_aead(key, data, random1, &CHACHA20_POLY1305);
         //Note: 128 bit key not 256 like the other two aeads
         test_aead(&key[0..16], data, random1, &AES_128_GCM);
-        //println!("AES_256_GCM");
         test_aead(key, data, random1, &AES_256_GCM);
         println!("done aead");
 
@@ -188,9 +200,9 @@ fn main() {
         test_digest(data, &SHA512_256);
         println!("done digest");
 
-        test_hkdf(data, key, &HKDF_SHA256);
-        test_hkdf(data, key, &HKDF_SHA384);
-        test_hkdf(data, key, &HKDF_SHA512);
+        test_hkdf(data, random1, random2, key, &HKDF_SHA256);
+        test_hkdf(data, random1, random2, key, &HKDF_SHA384);
+        test_hkdf(data, random1, random2, key, &HKDF_SHA512);
         println!("done hkdf");
 
         test_hmac(data, key, &HMAC_SHA256);
