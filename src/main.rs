@@ -7,6 +7,7 @@ use ring::digest::{Context, SHA256, SHA384, SHA512, SHA512_256};
 use ring::hkdf::{HKDF_SHA256, HKDF_SHA384, HKDF_SHA512};
 use ring::hmac::{HMAC_SHA256, HMAC_SHA384, HMAC_SHA512};
 use ring::pbkdf2::{PBKDF2_HMAC_SHA256, PBKDF2_HMAC_SHA384, PBKDF2_HMAC_SHA512};
+use ring::signature::*;
 //use ring::test::rand as testrand;
 use data_encoding::BASE64;
 extern crate arrayref;
@@ -51,7 +52,7 @@ fn test_aead(key: &[u8], data: &[u8], random1: &[u8], algo: &'static ring::aead:
     //println!("{}", BASE64.encode(&decrypted_data[..datalength]));
     assert_eq!(data[..], decrypted_data[..data.len()]);
 }
-fn test_agreement(random1 :&[u8],keylenth: usize, algo: &'static ring::agreement::Algorithm) {
+fn test_agreement(random1: &[u8], keylenth: usize, algo: &'static ring::agreement::Algorithm) {
     //let rng = ringrand::SystemRandom::new();
     //TODO make the key a SHA512 hash of data then take values
     let rng = ring::test::rand::FixedSliceRandom {
@@ -104,11 +105,17 @@ impl From<ring::hkdf::Okm<'_, My<usize>>> for My<Vec<u8>> {
         My(r)
     }
 }
-fn test_hkdf(data: &[u8], random1: &[u8], random2: &[u8], key: &[u8], algo: &'static ring::hkdf::Algorithm) {
+fn test_hkdf(
+    data: &[u8],
+    random1: &[u8],
+    random2: &[u8],
+    key: &[u8],
+    algo: &'static ring::hkdf::Algorithm,
+) {
     //println!("datalen: {} , random1len {} , random2len {}, keylen {}",data.len(),random1.len(),random2.len(),key.len());
     let salt = ring::hkdf::Salt::new(*algo, key);
     let prk = salt.extract(random1);
-    let My(_out)= prk.expand(&[&data], My(random2.len())).unwrap().into();
+    let My(_out) = prk.expand(&[&data], My(random2.len())).unwrap().into();
     //println!("HDKF: {}", BASE64.encode(out.as_ref()));
 }
 
@@ -136,6 +143,32 @@ fn test_pbkdf2(
     assert_eq!(answer, Ok(()));
 }
 
+fn test_ed25519(data: &[u8], key: &[u8]) {
+    let rng = ring::test::rand::FixedSliceRandom { bytes: &key };
+    let pkcs8_bytes = ring::signature::Ed25519KeyPair::generate_pkcs8(&rng).unwrap();
+
+    // Normally the application would store the PKCS#8 file persistently. Later
+    // it would read the PKCS#8 file from persistent storage to use it.
+
+    let key_pair = ring::signature::Ed25519KeyPair::from_pkcs8(pkcs8_bytes.as_ref()).unwrap();
+
+    // Sign the message "hello, world".
+
+    let sig = key_pair.sign(data);
+
+    // Normally an application would extract the bytes of the signature and
+    // send them in a protocol message to the peer(s). Here we just get the
+    // public key key directly from the key pair.
+    let peer_public_key_bytes = key_pair.public_key().as_ref();
+
+    // Verify the signature of the message using the public key. Normally the
+    // verifier of the message would parse the inputs to this code out of the
+    // protocol message(s) sent by the signer.
+    let peer_public_key =
+        ring::signature::UnparsedPublicKey::new(&ring::signature::ED25519, peer_public_key_bytes);
+    peer_public_key.verify(data, sig.as_ref()).unwrap();
+}
+
 fn main() {
     for x in 0..100 {
         println!("Attempt {}", x);
@@ -149,7 +182,7 @@ fn main() {
             let value: u8 = rng.gen();
             content.push(value);
         }
-        let data : &[u8] = content.as_ref();
+        let data: &[u8] = content.as_ref();
 
         //println!("Data: {}", BASE64.encode(data));
 
@@ -187,32 +220,35 @@ fn main() {
         //Note: 128 bit key not 256 like the other two aeads
         test_aead(&key[0..16], data, random1, &AES_128_GCM);
         test_aead(key, data, random1, &AES_256_GCM);
-        println!("done aead");
+        //println!("done aead");
 
         test_agreement(random1, 32, &ECDH_P256);
         test_agreement(random1, 48, &ECDH_P384);
         test_agreement(random1, 32, &X25519);
-        println!("done agreement");
+        //println!("done agreement");
 
         test_digest(data, &SHA256);
         test_digest(data, &SHA384);
         test_digest(data, &SHA512);
         test_digest(data, &SHA512_256);
-        println!("done digest");
+        //println!("done digest");
 
         test_hkdf(data, random1, random2, key, &HKDF_SHA256);
         test_hkdf(data, random1, random2, key, &HKDF_SHA384);
         test_hkdf(data, random1, random2, key, &HKDF_SHA512);
-        println!("done hkdf");
+        //println!("done hkdf");
 
         test_hmac(data, key, &HMAC_SHA256);
         test_hmac(data, key, &HMAC_SHA384);
         test_hmac(data, key, &HMAC_SHA512);
-        println!("done hmac");
+        //println!("done hmac");
 
         test_pbkdf2(data, random1, random2, &PBKDF2_HMAC_SHA256);
         test_pbkdf2(data, random1, random2, &PBKDF2_HMAC_SHA384);
         test_pbkdf2(data, random1, random2, &PBKDF2_HMAC_SHA512);
-        println!("done pbkdf2");
+        //println!("done pbkdf2");
+
+        test_ed25519(data, key);
+        println!("done ed25519");
     }
 }
