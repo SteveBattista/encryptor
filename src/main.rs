@@ -1,5 +1,6 @@
 #![forbid(unsafe_code)]
 
+
 use rand::*;
 use ring::aead::{AES_128_GCM, AES_256_GCM, CHACHA20_POLY1305};
 use ring::agreement::{ECDH_P256, ECDH_P384, X25519};
@@ -7,9 +8,12 @@ use ring::digest::{Context, SHA256, SHA384, SHA512, SHA512_256};
 use ring::hkdf::{HKDF_SHA256, HKDF_SHA384, HKDF_SHA512};
 use ring::hmac::{HMAC_SHA256, HMAC_SHA384, HMAC_SHA512};
 use ring::pbkdf2::{PBKDF2_HMAC_SHA256, PBKDF2_HMAC_SHA384, PBKDF2_HMAC_SHA512};
-use ring::signature::*;
+use ring::signature::KeyPair;
+use ring::signature::{ECDSA_P256_SHA256_FIXED_SIGNING,ECDSA_P256_SHA256_FIXED,ECDSA_P256_SHA256_ASN1_SIGNING,ECDSA_P256_SHA256_ASN1};
+use ring::signature::{ECDSA_P384_SHA384_FIXED_SIGNING,ECDSA_P384_SHA384_FIXED,ECDSA_P384_SHA384_ASN1_SIGNING,ECDSA_P384_SHA384_ASN1};
+
 //use ring::test::rand as testrand;
-use data_encoding::BASE64;
+//use data_encoding::BASE64;
 extern crate arrayref;
 
 fn test_aead(key: &[u8], data: &[u8], random1: &[u8], algo: &'static ring::aead::Algorithm) {
@@ -152,8 +156,6 @@ fn test_ed25519(data: &[u8], key: &[u8]) {
 
     let key_pair = ring::signature::Ed25519KeyPair::from_pkcs8(pkcs8_bytes.as_ref()).unwrap();
 
-    // Sign the message "hello, world".
-
     let sig = key_pair.sign(data);
 
     // Normally an application would extract the bytes of the signature and
@@ -169,6 +171,29 @@ fn test_ed25519(data: &[u8], key: &[u8]) {
     peer_public_key.verify(data, sig.as_ref()).unwrap();
 }
 
+fn test_ecdsa(data: &[u8], random1: &[u8],keylength : usize, signalgo : &'static ring::signature::EcdsaSigningAlgorithm , verifyalgo :&'static ring::signature::EcdsaVerificationAlgorithm) {
+    let rng = ring::test::rand::FixedSliceRandom { bytes: &random1[..keylength] };
+    let pkcs8_bytes = ring::signature::EcdsaKeyPair::generate_pkcs8(signalgo,&rng).unwrap();
+
+    // Normally the application would store the PKCS#8 file persistently. Later
+    // it would read the PKCS#8 file from persistent storage to use it.
+
+    let key_pair = ring::signature::EcdsaKeyPair::from_pkcs8(signalgo, pkcs8_bytes.as_ref()).unwrap();
+
+    let sig = key_pair.sign(&rng,data).unwrap();
+
+    // Normally an application would extract the bytes of the signature and
+    // send them in a protocol message to the peer(s). Here we just get the
+    // public key key directly from the key pair.
+    let peer_public_key_bytes = key_pair.public_key().as_ref();
+
+    // Verify the signature of the message using the public key. Normally the
+    // verifier of the message would parse the inputs to this code out of the
+    // protocol message(s) sent by the signer.
+    let peer_public_key =
+        ring::signature::UnparsedPublicKey::new(verifyalgo, peer_public_key_bytes);
+    peer_public_key.verify(data, sig.as_ref()).unwrap();
+}
 fn main() {
     for x in 0..100 {
         println!("Attempt {}", x);
@@ -247,6 +272,12 @@ fn main() {
         test_pbkdf2(data, random1, random2, &PBKDF2_HMAC_SHA384);
         test_pbkdf2(data, random1, random2, &PBKDF2_HMAC_SHA512);
         //println!("done pbkdf2");
+
+        test_ecdsa(data, random1,32,&ECDSA_P256_SHA256_FIXED_SIGNING,&ECDSA_P256_SHA256_FIXED);
+        test_ecdsa(data, random1,32,&ECDSA_P256_SHA256_ASN1_SIGNING,&ECDSA_P256_SHA256_ASN1);
+        test_ecdsa(data, random1,48,&ECDSA_P384_SHA384_FIXED_SIGNING,&ECDSA_P384_SHA384_FIXED);
+        test_ecdsa(data, random1,48,&ECDSA_P384_SHA384_ASN1_SIGNING,&ECDSA_P384_SHA384_ASN1);
+        println!("done ecdsa");
 
         test_ed25519(data, key);
         println!("done ed25519");
