@@ -227,8 +227,8 @@ fn main() {
         println!("Attempt {}", x);
         let mut rng = rand::thread_rng();
 
-        let datalength: usize = rng.gen_range(1, 500);
-        //Todo check if I can use 0
+        let datalength: usize = rng.gen_range(0, 500);
+
 
         let mut content = Vec::new();
         for _ in 0..datalength {
