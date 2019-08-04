@@ -10,3 +10,8 @@ Not testing  the wiring of PKS8 files to disk. Just keeping them in memory.<BR>
 In aead nonce is first 12 bytes of the key.<BR>
 
 zero legnth input can cause crashes. (PBKDF2 random1 or random2). There needs to also be a check for length of output<BR>
+
+TODO<BR>
+1. RSA aignatures <BR>
+2. Make a lot more constants <BR>
+3. Clean up println statments <BR>
