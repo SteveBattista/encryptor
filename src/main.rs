@@ -172,12 +172,11 @@ fn test_ed25519(data: &[u8], key: &[u8]) {
 }
 
 fn test_ecdsa(data: &[u8], key: &[u8], signalgo : &'static ring::signature::EcdsaSigningAlgorithm , verifyalgo :&'static ring::signature::EcdsaVerificationAlgorithm) {
-    println!("{}",BASE64.encode(key.as_ref()));
+    //println!("{}",BASE64.encode(key.as_ref()));
     let rng = ring::test::rand::FixedSliceRandom { bytes: &key};
-    println!("{}",BASE64.encode(key.as_ref()));
-    println!("here3");
+    //println!("{}",BASE64.encode(key.as_ref()));
     let pkcs8_bytes = ring::signature::EcdsaKeyPair::generate_pkcs8(signalgo,&rng).unwrap();
-    println!("here4");
+
     // Normally the application would store the PKCS#8 file persistently. Later
     // it would read the PKCS#8 file from persistent storage to use it.
 
@@ -198,16 +197,17 @@ fn test_ecdsa(data: &[u8], key: &[u8], signalgo : &'static ring::signature::Ecds
     peer_public_key.verify(data, sig.as_ref()).unwrap();
 }
 
-/*fn test_rsa(data: &[u8], random1: &[u8],keylength : usize, signalgo : &'static ring::signature::RsaParameters:: , verifyalgo :&'static ring::signature::RsaVerificationAlgorithm) {
-    let rng = ring::test::rand::FixedSliceRandom { bytes: &random1[..keylength] };
-    let pkcs8_bytes = ring::signature::EcdsaKeyPair::generate_pkcs8(signalgo,&rng).unwrap();
+fn test_rsa(data: &[u8], key: &[u8], padding_alg: &ring::signature::RsaEncoding ,  signalgo : &'static ring::signature::RsaParameters:: , verifyalgo :&'static ring::signature::VerificationAlgorithm) {
+    let rng = ring::test::rand::FixedSliceRandom { bytes: &key};
+    let pkcs8_bytes = ring::signature::RsaKeyPair::generate_pkcs8(signalgo,&rng).unwrap();
 
     // Normally the application would store the PKCS#8 file persistently. Later
     // it would read the PKCS#8 file from persistent storage to use it.
 
-    let key_pair = ring::signature::EcdsaKeyPair::from_pkcs8(signalgo, pkcs8_bytes.as_ref()).unwrap();
+    let key_pair = ring::signature::RsaKeyPair::from_pkcs8(pkcs8_bytes.as_ref()).unwrap();
 
-    let sig = key_pair.sign(&rng,data).unwrap();
+    let signature : &mut [u8] =&mut [0;1024]; //need to fix length
+    key_pair.sign(padding_alg,&rng,data,signature).unwrap();
 
     // Normally an application would extract the bytes of the signature and
     // send them in a protocol message to the peer(s). Here we just get the
@@ -219,8 +219,8 @@ fn test_ecdsa(data: &[u8], key: &[u8], signalgo : &'static ring::signature::Ecds
     // protocol message(s) sent by the signer.
     let peer_public_key =
         ring::signature::UnparsedPublicKey::new(verifyalgo, peer_public_key_bytes);
-    peer_public_key.verify(data, sig.as_ref()).unwrap();
-} */
+    peer_public_key.verify(data, signature.as_ref()).unwrap();
+}
 
 fn main() {
     for x in 0..100 {
@@ -269,6 +269,7 @@ fn main() {
         //println!("random2len: {}", random2.len());
         //println!("random2: {}", BASE64.encode(random2));
 
+        // Should I re-key the key with random values rather than use hash?
         /*let mut content = Vec::new();
         for _ in 0..48{
             let value: u8 = rng.gen();
