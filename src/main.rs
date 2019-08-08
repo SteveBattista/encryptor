@@ -13,7 +13,7 @@ use ring::signature::{ECDSA_P256_SHA256_FIXED_SIGNING,ECDSA_P256_SHA256_FIXED,EC
 use ring::signature::{ECDSA_P384_SHA384_FIXED_SIGNING,ECDSA_P384_SHA384_FIXED,ECDSA_P384_SHA384_ASN1_SIGNING,ECDSA_P384_SHA384_ASN1};
 
 //use ring::test::rand as testrand;
-use data_encoding::BASE64;
+//use data_encoding::BASE64;
 extern crate arrayref;
 
 fn test_aead(key: &[u8], data: &[u8], _random1: &[u8], algo: &'static ring::aead::Algorithm) {
@@ -197,7 +197,7 @@ fn test_ecdsa(data: &[u8], key: &[u8], signalgo : &'static ring::signature::Ecds
     peer_public_key.verify(data, sig.as_ref()).unwrap();
 }
 
-fn test_rsa(data: &[u8], key: &[u8], padding_alg: &ring::signature::RsaEncoding ,  signalgo : &'static ring::signature::RsaParameters:: , verifyalgo :&'static ring::signature::VerificationAlgorithm) {
+/*fn test_rsa(data: &[u8], key: &[u8], padding_alg: &ring::signature::RsaEncoding ,  signalgo : &'static ring::signature::RsaParameters:: , verifyalgo :&'static ring::signature::VerificationAlgorithm) {
     let rng = ring::test::rand::FixedSliceRandom { bytes: &key};
     let pkcs8_bytes = ring::signature::RsaKeyPair::generate_pkcs8(signalgo,&rng).unwrap();
 
@@ -220,7 +220,7 @@ fn test_rsa(data: &[u8], key: &[u8], padding_alg: &ring::signature::RsaEncoding 
     let peer_public_key =
         ring::signature::UnparsedPublicKey::new(verifyalgo, peer_public_key_bytes);
     peer_public_key.verify(data, signature.as_ref()).unwrap();
-}
+}*/
 
 fn main() {
     for x in 0..100 {
@@ -243,8 +243,8 @@ fn main() {
         context.update(data);
         let digest = context.finish();
         let key =digest.as_ref();
-        println!("{}",key.len());
-        println!("{}",BASE64.encode(key.as_ref()));
+        //println!("{}",key.len());
+        //println!("{}",BASE64.encode(key.as_ref()));
 
         let mut rng: rand::rngs::StdRng =
             rand::SeedableRng::from_seed(*arrayref::array_ref!(&key[..32], 0, 32));
@@ -307,15 +307,15 @@ fn main() {
         test_pbkdf2(data, random1, random2, &PBKDF2_HMAC_SHA256);
         test_pbkdf2(data, random1, random2, &PBKDF2_HMAC_SHA384);
         test_pbkdf2(data, random1, random2, &PBKDF2_HMAC_SHA512);
-        println!("done pbkdf2");
+        //println!("done pbkdf2");
 
         test_ecdsa(data, &key[..32],&ECDSA_P256_SHA256_FIXED_SIGNING,&ECDSA_P256_SHA256_FIXED);
         test_ecdsa(data, &key[..32],&ECDSA_P256_SHA256_ASN1_SIGNING,&ECDSA_P256_SHA256_ASN1);
         test_ecdsa(data, &key,&ECDSA_P384_SHA384_FIXED_SIGNING,&ECDSA_P384_SHA384_FIXED);
         test_ecdsa(data, &key,&ECDSA_P384_SHA384_ASN1_SIGNING,&ECDSA_P384_SHA384_ASN1);
-        println!("done ecdsa");
+        //println!("done ecdsa");
 
         test_ed25519(data, &key[..32]);
-        println!("done ed25519");
+        //println!("done ed25519");
     }
 }
