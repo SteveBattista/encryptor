@@ -16,6 +16,6 @@ zero length in random1 or random2 can cause crashes. (PBKDF2 needs non zero). <B
 
 
 TODO<BR>
-1. RSA signatures <BR>
+1. RSA signatures: I'm defering this based on this blog  https://blog.trailofbits.com/2019/07/08/fuck-rsa/ <BR>
 2. Make a lot more constants <BR>
 3. Clean up println! statements <BR>
