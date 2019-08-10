@@ -6,16 +6,19 @@ Built with ring = "0.16.5"<BR>
 
 
 Not testing:<BR>
-The writing of PKS8 files to disk. Just keeping them in memory.<BR>
-Does not test nonce advance as we want to try an unlimited number of attempts. Uses less_safe_key in aead.<BR>
+1. The writing of PKS8 files to disk. Just keeping them in memory.<BR>
+2. Does not test nonce advance as we want to try an unlimited number of attempts. Uses less_safe_key in aead.<BR>
+
+3. RSA signatures: Ring does not have a rust function to generate primes. This is because there is a lot of risk in picking improper primes. For more information read this blog post https://blog.trailofbits.com/2019/07/08/fuck-rsa/ <BR>
+
+4. When performing hahes, we used the two step method of adding context.update(data)
 
 Might Impact Outcome:<BR>
 In aead nonce is first 12 bytes of the key.<BR>
 
-zero length in random1 or random2 can cause crashes. (PBKDF2 needs non zero). <BR>
+zero length in random1 or random2 can cause crashes. (PBKDF2 needs non zero values). <BR>
 
 
 TODO<BR>
-1. RSA signatures: I'm defering this based on this blog  https://blog.trailofbits.com/2019/07/08/fuck-rsa/ <BR>
-2. Make a lot more constants <BR>
+
 3. Clean up println! statements <BR>

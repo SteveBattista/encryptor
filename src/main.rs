@@ -15,10 +15,17 @@ use ring::signature::{ECDSA_P384_SHA384_FIXED_SIGNING,ECDSA_P384_SHA384_FIXED,EC
 //use ring::test::rand as testrand;
 //use data_encoding::BASE64;
 extern crate arrayref;
+const NONCELEN: usize= 12;
+const KEY128: usize = 16;
+const KEY256: usize = 32;
+const KEY384: usize = 48;
+const RUNS: usize =100;
+const MAXRANDLEN: usize = 500;
 
 fn test_aead(key: &[u8], data: &[u8], _random1: &[u8], algo: &'static ring::aead::Algorithm) {
     // Ring uses the same input variable as output
     let mut in_out = data.to_vec();
+
 
     // The input/output variable need some space for a suffix
     for _ in 0..algo.tag_len() {
@@ -29,9 +36,9 @@ fn test_aead(key: &[u8], data: &[u8], _random1: &[u8], algo: &'static ring::aead
     let unboud_key = ring::aead::UnboundKey::new(algo, key).unwrap();
     let less_safe_key = ring::aead::LessSafeKey::new(unboud_key);
 
-    let nonce_byte = &mut [0; 12];
+    let nonce_byte = &mut [0; NONCELEN];
 
-    nonce_byte.copy_from_slice(&key[0..12]);
+    nonce_byte.copy_from_slice(&key[0..NONCELEN]);
 
     // Encrypt data into in_out variable
     ring::aead::LessSafeKey::seal_in_place_append_tag(
@@ -223,11 +230,11 @@ fn test_ecdsa(data: &[u8], key: &[u8], signalgo : &'static ring::signature::Ecds
 }*/
 
 fn main() {
-    for x in 0..100 {
+    for x in 0..RUNS {
         println!("Attempt {}", x);
         let mut rng = rand::thread_rng();
 
-        let datalength: usize = rng.gen_range(0, 500);
+        let datalength: usize = rng.gen_range(0, MAXRANDLEN);
 
 
         let mut content = Vec::new();
@@ -247,9 +254,9 @@ fn main() {
         //println!("{}",BASE64.encode(key.as_ref()));
 
         let mut rng: rand::rngs::StdRng =
-            rand::SeedableRng::from_seed(*arrayref::array_ref!(&key[..32], 0, 32));
-
-        let randomlen = rng.gen_range(1, 500);
+            rand::SeedableRng::from_seed(*arrayref::array_ref!(&key[..KEY256], 0, KEY256));
+        // Can't be 0 needed for pbkdf2
+        let randomlen = rng.gen_range(1, MAXRANDLEN);
         let mut content = Vec::new();
         for _ in 0..randomlen {
             let value: u8 = rng.gen();
@@ -258,8 +265,8 @@ fn main() {
         let random1: &[u8] = content.as_ref();
         //println!("random1len: {}", random1.len());
         //println!("random1: {}", BASE64.encode(random1));
-
-        let randomlen = rng.gen_range(1, 500); //Needs to be non-zero
+        // Can't be 0 needed for pbkdf2
+        let randomlen = rng.gen_range(1, MAXRANDLEN); //Needs to be non-zero
         let mut content = Vec::new();
         for _ in 0..randomlen {
             let value: u8 = rng.gen();
@@ -277,15 +284,14 @@ fn main() {
         }
         let key: &[u8] = content.as_ref(); */
 
-        test_aead(&key[..32], data, random1, &CHACHA20_POLY1305);
-        //Note: 128 bit key not 256 like the other two aeads
-        test_aead(&key[0..16], data, random1, &AES_128_GCM);
-        test_aead(&key[..32], data, random1, &AES_256_GCM);
+        test_aead(&key[..KEY256], data, random1, &CHACHA20_POLY1305);
+        test_aead(&key[0..KEY128], data, random1, &AES_128_GCM);
+        test_aead(&key[..KEY256], data, random1, &AES_256_GCM);
         //println!("done aead");
 
-        test_agreement(&key[..32],&ECDH_P256);
-        test_agreement(&key[..48],&ECDH_P384);
-        test_agreement(&key[..32],&X25519);
+        test_agreement(&key[..KEY256],&ECDH_P256);
+        test_agreement(&key[..KEY384],&ECDH_P384);
+        test_agreement(&key[..KEY256],&X25519);
         //println!("done agreement");
 
         test_digest(data, &SHA256);
@@ -294,14 +300,14 @@ fn main() {
         test_digest(data, &SHA512_256);
         //println!("done digest");
 
-        test_hkdf(data, random1, random2, &key[..32], &HKDF_SHA256);
-        test_hkdf(data, random1, random2, &key[..32], &HKDF_SHA384);
-        test_hkdf(data, random1, random2, &key[..32], &HKDF_SHA512);
+        test_hkdf(data, random1, random2, &key[..KEY256], &HKDF_SHA256);
+        test_hkdf(data, random1, random2, &key[..KEY256], &HKDF_SHA384);
+        test_hkdf(data, random1, random2, &key[..KEY256], &HKDF_SHA512);
         //println!("done hkdf");
 
-        test_hmac(data, &key[..32], &HMAC_SHA256);
-        test_hmac(data, &key[..32], &HMAC_SHA384);
-        test_hmac(data, &key[..32], &HMAC_SHA512);
+        test_hmac(data, &key[..KEY256], &HMAC_SHA256);
+        test_hmac(data, &key[..KEY256], &HMAC_SHA384);
+        test_hmac(data, &key[..KEY256], &HMAC_SHA512);
         //println!("done hmac");
 
         test_pbkdf2(data, random1, random2, &PBKDF2_HMAC_SHA256);
@@ -309,13 +315,13 @@ fn main() {
         test_pbkdf2(data, random1, random2, &PBKDF2_HMAC_SHA512);
         //println!("done pbkdf2");
 
-        test_ecdsa(data, &key[..32],&ECDSA_P256_SHA256_FIXED_SIGNING,&ECDSA_P256_SHA256_FIXED);
-        test_ecdsa(data, &key[..32],&ECDSA_P256_SHA256_ASN1_SIGNING,&ECDSA_P256_SHA256_ASN1);
+        test_ecdsa(data, &key[..KEY256],&ECDSA_P256_SHA256_FIXED_SIGNING,&ECDSA_P256_SHA256_FIXED);
+        test_ecdsa(data, &key[..KEY256],&ECDSA_P256_SHA256_ASN1_SIGNING,&ECDSA_P256_SHA256_ASN1);
         test_ecdsa(data, &key,&ECDSA_P384_SHA384_FIXED_SIGNING,&ECDSA_P384_SHA384_FIXED);
         test_ecdsa(data, &key,&ECDSA_P384_SHA384_ASN1_SIGNING,&ECDSA_P384_SHA384_ASN1);
         //println!("done ecdsa");
 
-        test_ed25519(data, &key[..32]);
+        test_ed25519(data, &key[..KEY256]);
         //println!("done ed25519");
     }
 }
